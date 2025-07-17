@@ -1,0 +1,537 @@
+<!-- Add CSRF token for AJAX requests -->
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}" id="csrf-token">
+
+    <script>
+      const score = document.querySelector(".score");
+      const highScore = document.querySelector(".highScore");
+      const lives = document.querySelector(".lives");
+      const level = document.querySelector(".level");
+      const highLevel = document.querySelector(".highLevel");
+      const startScreen = document.querySelector(".startScreen");
+      const gameArea = document.querySelector(".gameArea");
+      const ClickToStart = document.querySelector(".ClickToStart");
+      const gameMusic = document.getElementById("gameMusic");
+      const musicControls = document.querySelector(".musicControls");
+      const syncStatus = document.getElementById("syncStatus");
+
+      ClickToStart.addEventListener("click", Start);
+      document.addEventListener("keydown", keydown);
+      document.addEventListener("keyup", keyup);
+
+      let keys = {
+        ArrowUp: false,
+        ArrowDown: false,
+        ArrowLeft: false,
+        ArrowRight: false,
+        Escape: false,
+      };
+
+      // Game data management system
+      const GameData = {
+        // Check if user is authenticated
+        isAuthenticated: {% if user.is_authenticated %}true{% else %}false{% endif %},
+        
+        // Get CSRF token for AJAX requests
+        getCSRFToken: function() {
+          return document.getElementById('csrf-token').value;
+        },
+
+        // Load initial data from server for authenticated users
+        serverData: {
+          high_score: {% if user.is_authenticated and user.profile %}{{ user.profile.high_score }}{% else %}0{% endif %},
+          high_level: {% if user.is_authenticated and user.profile %}{{ user.profile.high_level }}{% else %}1{% endif %},
+          music_enabled: {% if user.is_authenticated and user.profile %}{{ user.profile.music_enabled|yesno:"true,false" }}{% else %}true{% endif %}
+        },
+
+        // Local storage key
+        localStorageKey: 'greenline_rush_data',
+
+        // Get game data (priority: server > local storage > defaults)
+        getData: function() {
+          if (this.isAuthenticated) {
+            // For authenticated users, use server data
+            return {
+              highScore: this.serverData.high_score,
+              highLevel: this.serverData.high_level,
+              musicEnabled: this.serverData.music_enabled
+            };
+          } else {
+            // For anonymous users, use local storage
+            const stored = localStorage.getItem(this.localStorageKey);
+            if (stored) {
+              try {
+                const data = JSON.parse(stored);
+                return {
+                  highScore: data.highScore || 0,
+                  highLevel: data.highLevel || 1,
+                  musicEnabled: data.musicEnabled !== undefined ? data.musicEnabled : true
+                };
+              } catch (e) {
+                console.error('Error parsing stored data:', e);
+              }
+            }
+            
+            // Default values
+            return {
+              highScore: 0,
+              highLevel: 1,
+              musicEnabled: true
+            };
+          }
+        },
+
+        // Save game data
+        saveData: function(data) {
+          if (this.isAuthenticated) {
+            // Save to server
+            this.saveToServer(data);
+            syncStatus.textContent = "SYNCING...";
+            syncStatus.style.color = "#ffff00";
+          } else {
+            // Save to local storage
+            this.saveToLocalStorage(data);
+            syncStatus.textContent = "LOCAL DATA";
+            syncStatus.style.color = "#00ff00";
+          }
+        },
+
+        // Save to local storage
+        saveToLocalStorage: function(data) {
+          try {
+            localStorage.setItem(this.localStorageKey, JSON.stringify(data));
+          } catch (e) {
+            console.error('Error saving to localStorage:', e);
+          }
+        },
+
+        // Save to server via AJAX
+        saveToServer: function(data) {
+          fetch('/api/save-game-data/', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': this.getCSRFToken()
+            },
+            body: JSON.stringify(data)
+          })
+          .then(response => response.json())
+          .then(result => {
+            if (result.success) {
+              syncStatus.textContent = "SYNCED ✓";
+              syncStatus.style.color = "#00ff00";
+              setTimeout(() => {
+                syncStatus.textContent = "SERVER DATA";
+                syncStatus.style.color = "#00ff00";
+              }, 2000);
+            } else {
+              syncStatus.textContent = "SYNC ERROR";
+              syncStatus.style.color = "#ff4444";
+            }
+          })
+          .catch(error => {
+            console.error('Error saving to server:', error);
+            syncStatus.textContent = "SYNC ERROR";
+            syncStatus.style.color = "#ff4444";
+          });
+        },
+
+        // Synchronize local data with server when user logs in
+        syncOnLogin: function() {
+          const localData = localStorage.getItem(this.localStorageKey);
+          if (localData) {
+            try {
+              const data = JSON.parse(localData);
+              
+              // Send local data to server for synchronization
+              fetch('/api/sync-on-login/', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': this.getCSRFToken()
+                },
+                body: JSON.stringify(data)
+              })
+              .then(response => response.json())
+              .then(result => {
+                if (result.success) {
+                  // Update server data with merged results
+                  this.serverData = result.data;
+                  
+                  // Clear local storage after successful sync
+                  localStorage.removeItem(this.localStorageKey);
+                  
+                  // Update display
+                  updateDisplays();
+                  
+                  showMessage("🔄 DATA SYNCED! 🔄<br/>Welcome back!", 2000);
+                }
+              })
+              .catch(error => {
+                console.error('Error syncing data:', error);
+              });
+            } catch (e) {
+              console.error('Error parsing local data for sync:', e);
+            }
+          }
+        },
+
+        // Clear local data when user logs out
+        clearLocalData: function() {
+          localStorage.removeItem(this.localStorageKey);
+        }
+      };
+
+      // Initialize game data
+      const gameData = GameData.getData();
+      
+      let player = {
+        speed: 3,
+        score: 0,
+        highScore: gameData.highScore,
+        lives: 3,
+        level: 1,
+        highLevel: gameData.highLevel,
+        isPaused: false,
+        isStart: false,
+        invincible: false,
+        carsAvoided: 0,
+        scoreForNextLevel: 100,
+        musicEnabled: gameData.musicEnabled,
+        maxOpponents: 4,
+      };
+
+      let pauseScreen = null;
+
+      // Auto-sync on login if user just logged in
+      if (GameData.isAuthenticated) {
+        // Check if there's local data to sync
+        const localData = localStorage.getItem(GameData.localStorageKey);
+        if (localData) {
+          GameData.syncOnLogin();
+        } else {
+          syncStatus.textContent = "SERVER DATA";
+          syncStatus.style.color = "#00ff00";
+        }
+      }
+
+      function keydown(e) {
+        keys[e.key] = true;
+        if (e.key === "Escape") togglePause();
+      }
+
+      function keyup(e) {
+        keys[e.key] = false;
+      }
+
+      function toggleMusic() {
+        player.musicEnabled = !player.musicEnabled;
+        if (player.musicEnabled) {
+          gameMusic.play();
+          musicControls.innerHTML = '<i class="fas fa-music"></i> MUSIC: ON';
+        } else {
+          gameMusic.pause();
+          musicControls.innerHTML = '<i class="fas fa-music"></i> MUSIC: OFF';
+        }
+        
+        // Save music preference
+        saveGameData();
+      }
+
+      function saveGameData() {
+        const data = {
+          highScore: player.highScore,
+          highLevel: player.highLevel,
+          musicEnabled: player.musicEnabled
+        };
+        GameData.saveData(data);
+      }
+
+      function showMessage(text, duration = 2000) {
+        let message = document.createElement("div");
+        message.setAttribute("class", "message");
+        message.innerHTML = text;
+        gameArea.appendChild(message);
+
+        setTimeout(() => {
+          if (message.parentNode) {
+            message.parentNode.removeChild(message);
+          }
+        }, duration);
+      }
+
+      function getScoreForLevel(level) {
+        if (level === 1) return 0;
+        if (level === 2) return 100;
+        if (level === 3) return 250;
+        if (level === 4) return 450;
+        if (level === 5) return 700;
+        if (level === 6) return 1000;
+        return 1000 + (level - 6) * 300;
+      }
+
+      function getOpponentCountForLevel(level) {
+        if (level >= 6) return 4;
+        if (level >= 3) return 3;
+        return 2;
+      }
+
+      function Start() {
+        gameArea.innerHTML = "";
+        startScreen.classList.add("hide");
+        player.isStart = true;
+        player.score = 0;
+        player.lives = 3;
+        player.level = 1;
+        player.speed = 3;
+        player.invincible = false;
+        player.carsAvoided = 0;
+        player.scoreForNextLevel = getScoreForLevel(2);
+        player.isPaused = false;
+
+        if (player.musicEnabled) {
+          gameMusic.play();
+        }
+
+        updateDisplays();
+        window.requestAnimationFrame(Play);
+
+        for (let i = 0; i < 5; i++) {
+          let roadLines = document.createElement("div");
+          roadLines.setAttribute("class", "roadLines");
+          roadLines.y = i * 140;
+          roadLines.style.top = roadLines.y + "px";
+          gameArea.appendChild(roadLines);
+        }
+
+        // Create initial opponents (2 cars)
+        for (let i = 0; i < 2; i++) {
+          createOpponent(i * -300);
+        }
+
+        let car = document.createElement("div");
+        car.setAttribute("class", "car");
+        car.innerHTML = '<i class="fas fa-car"></i>';
+        gameArea.appendChild(car);
+        player.x = car.offsetLeft;
+        player.y = car.offsetTop;
+
+        showMessage("🏁 GAME START 🏁<br/>LEVEL " + player.level, 1500);
+      }
+
+      function createOpponent(startY = -300) {
+        let Opponents = document.createElement("div");
+        Opponents.setAttribute("class", "Opponents");
+        Opponents.y = startY;
+        Opponents.style.top = Opponents.y + "px";
+        Opponents.innerHTML = '<i class="fas fa-car"></i>';
+        Opponents.style.left = Math.floor(Math.random() * 350) + "px";
+        gameArea.appendChild(Opponents);
+      }
+
+      function createLifeEmoji() {
+        let lifeEmoji = document.createElement("div");
+        lifeEmoji.setAttribute("class", "lifeEmoji");
+        lifeEmoji.y = -50;
+        lifeEmoji.style.top = lifeEmoji.y + "px";
+        lifeEmoji.innerHTML = "❤️";
+        gameArea.appendChild(lifeEmoji);
+        lifeEmoji.style.left = Math.floor(Math.random() * 350) + "px";
+      }
+
+      function updateDisplays() {
+        score.innerHTML = "SCORE: " + player.score;
+        highScore.innerHTML = "HIGH: " + player.highScore;
+        lives.innerHTML = "LIVES: " + player.lives;
+        level.innerHTML = "LEVEL: " + player.level;
+        highLevel.innerHTML = "HIGH LVL: " + player.highLevel;
+      }
+
+      function Play() {
+        let car = document.querySelector(".car");
+        let road = gameArea.getBoundingClientRect();
+
+        if (player.isStart && !player.isPaused) {
+          moveLines();
+          moveOpponents(car);
+
+          if (Math.random() < 0.0008) {
+            createLifeEmoji();
+          }
+
+          if (keys.ArrowUp && player.y > road.top + 70) {
+            player.y -= player.speed;
+          }
+          if (keys.ArrowDown && player.y < road.height - 75) {
+            player.y += player.speed;
+          }
+          if (keys.ArrowRight && player.x < 350) {
+            player.x += player.speed;
+          }
+          if (keys.ArrowLeft && player.x > 0) {
+            player.x -= player.speed;
+          }
+
+          car.style.top = player.y + "px";
+          car.style.left = player.x + "px";
+
+          if (player.invincible) {
+            car.classList.add("invincible");
+          } else {
+            car.classList.remove("invincible");
+          }
+
+          if (Math.random() < 0.3) {
+            player.score++;
+          }
+
+          if (player.highScore < player.score) {
+            player.highScore = player.score;
+            saveGameData();
+          }
+
+          if (player.score >= player.scoreForNextLevel) {
+            levelUp();
+          }
+
+          updateDisplays();
+          window.requestAnimationFrame(Play);
+        }
+      }
+
+      function moveLines() {
+        let roadLines = document.querySelectorAll(".roadLines");
+        roadLines.forEach(function (item) {
+          if (item.y >= 700) item.y -= 700;
+          item.y += player.speed;
+          item.style.top = item.y + "px";
+        });
+      }
+
+      function moveOpponents(car) {
+        let Opponents = document.querySelectorAll(".Opponents");
+        Opponents.forEach(function (item) {
+          if (isCollide(car, item) && !player.invincible) {
+            player.lives--;
+            showMessage("💥 COLLISION! 💥<br/>LIVES: " + player.lives, 1200);
+
+            player.invincible = true;
+            setTimeout(() => {
+              player.invincible = false;
+            }, 1000);
+
+            if (player.lives <= 0) {
+              endGame();
+              return;
+            } else {
+              resetPosition(car);
+            }
+          }
+
+          if (item.y >= 750) {
+            item.y -= 900;
+            item.style.left = Math.floor(Math.random() * 350) + "px";
+            player.carsAvoided++;
+            player.score += 2;
+          }
+          item.y += player.speed;
+          item.style.top = item.y + "px";
+        });
+
+        let lifeEmojis = document.querySelectorAll(".lifeEmoji");
+        lifeEmojis.forEach(function (item) {
+          if (isCollide(car, item)) {
+            player.lives++;
+            player.score += 20;
+            showMessage("💖 EXTRA LIFE! 💖<br/>LIVES: " + player.lives, 1200);
+            item.remove();
+          }
+          if (item.y >= 750) {
+            item.remove();
+          }
+          item.y += player.speed;
+          item.style.top = item.y + "px";
+        });
+      }
+
+      function isCollide(a, b) {
+        let aRect = a.getBoundingClientRect();
+        let bRect = b.getBoundingClientRect();
+        return !(
+          aRect.top > bRect.bottom ||
+          aRect.bottom < bRect.top ||
+          aRect.right < bRect.left ||
+          aRect.left > bRect.right
+        );
+      }
+
+      function levelUp() {
+        player.level++;
+        player.speed += 0.3;
+        player.scoreForNextLevel = getScoreForLevel(player.level + 1);
+
+        if (player.level > player.highLevel) {
+          player.highLevel = player.level;
+          saveGameData();
+        }
+
+        showMessage("🎉 LEVEL UP! 🎉<br/>LEVEL " + player.level + "<br/>SPEED INCREASED!", 2000);
+
+        // Control number of opponent cars based on level
+        let existingOpponents = document.querySelectorAll(".Opponents").length;
+        let allowedOpponents = getOpponentCountForLevel(player.level);
+
+        while (existingOpponents < allowedOpponents) {
+          createOpponent();
+          existingOpponents++;
+          showMessage("🚗 MORE TRAFFIC! 🚗<br/>STAY ALERT!", 1500);
+        }
+      }
+
+      function resetPosition(car) {
+        player.x = gameArea.getBoundingClientRect().width / 2 - car.offsetWidth / 2;
+        player.y = gameArea.getBoundingClientRect().height - car.offsetHeight - 10;
+      }
+
+      function togglePause() {
+        if (!player.isStart) return;
+        player.isPaused = !player.isPaused;
+
+        if (player.isPaused) {
+          gameMusic.pause();
+          pauseScreen = document.createElement("div");
+          pauseScreen.setAttribute("class", "paused");
+          pauseScreen.innerHTML = "⏸️ PAUSED ⏸️<br/><br/>Press ESC to Continue";
+          gameArea.appendChild(pauseScreen);
+        } else {
+          if (player.musicEnabled) gameMusic.play();
+          if (pauseScreen && pauseScreen.parentNode) {
+            pauseScreen.parentNode.removeChild(pauseScreen);
+          }
+          window.requestAnimationFrame(Play);
+        }
+      }
+
+      function endGame() {
+        player.isStart = false;
+        player.speed = 3;
+        gameMusic.pause();
+        
+        // Save final game data
+        saveGameData();
+        
+        showMessage("💀 GAME OVER! 💀<br/>SCORE: " + player.score + "<br/>LEVEL: " + player.level, 3000);
+
+        setTimeout(() => {
+          startScreen.classList.remove("hide");
+        }, 3000);
+      }
+
+      // Initialize music controls based on saved preference
+      if (player.musicEnabled) {
+        musicControls.innerHTML = '<i class="fas fa-music"></i> MUSIC: ON';
+      } else {
+        musicControls.innerHTML = '<i class="fas fa-music"></i> MUSIC: OFF';
+      }
+
+      updateDisplays();
+    </script>
