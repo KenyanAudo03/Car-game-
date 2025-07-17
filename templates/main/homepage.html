@@ -1,1 +1,580 @@
-<h1>Hello</h1>
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GreenLine Rush Car Game</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        font-family: "Orbitron", monospace;
+      }
+
+      .game {
+        background-repeat: no-repeat;
+        background-size: 100% 100%;
+        background-color: #1a1a1a;
+      }
+
+      .hide {
+        display: none;
+      }
+
+      .startScreen {
+        width: 500px;
+        height: 125px;
+        line-height: 20px;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+        margin: auto;
+        background-color: #2d5a2d;
+        text-align: center;
+        border: 3px solid #4a4a4a;
+        color: #00ff00;
+        padding: 20px;
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+      }
+
+      .score,
+      .highScore,
+      .lives,
+      .level,
+      .highLevel {
+        position: absolute;
+        text-align: center;
+        background-color: #2d5a2d;
+        color: #00ff00;
+        line-height: 40px;
+        border: 2px solid #4a4a4a;
+        font-size: 1em;
+        font-weight: bold;
+      }
+
+      .score {
+        top: 10px;
+        left: 20px;
+        width: 200px;
+      }
+
+      .highScore {
+        top: 10px;
+        left: 240px;
+        width: 180px;
+      }
+
+      .lives {
+        top: 10px;
+        right: 20px;
+        width: 120px;
+      }
+
+      .level {
+        top: 60px;
+        left: 20px;
+        width: 120px;
+      }
+
+      .highLevel {
+        top: 60px;
+        left: 160px;
+        width: 140px;
+      }
+
+      .ClickToStart {
+        cursor: pointer;
+        font-size: 1.2em;
+        color: #00ff00;
+        text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+      }
+
+      .gameArea {
+        height: 100vh;
+        width: 400px;
+        margin: auto;
+        position: relative;
+        background-color: #1a1a1a;
+        overflow: hidden;
+        border-left: 4px solid #4a4a4a;
+        border-right: 4px solid #4a4a4a;
+      }
+
+      .car,
+      .Opponents {
+        padding: 0;
+        margin: 0;
+        font-size: 50px;
+        color: #00ff00;
+        position: absolute;
+        line-height: 50px;
+        top: 520px;
+        margin-left: 5px;
+        line-height: 50px;
+        font-size: 45px;
+        text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+      }
+
+      .Opponents {
+        color: #ff4444;
+        text-shadow: 0 0 10px rgba(255, 68, 68, 0.8);
+        top: 0;
+      }
+
+      .lifeEmoji {
+        padding: 0;
+        margin: 0;
+        font-size: 30px;
+        position: absolute;
+        line-height: 30px;
+        margin-left: 5px;
+        color: #ffff00;
+        text-shadow: 0 0 10px rgba(255, 255, 0, 0.8);
+      }
+
+      .roadLines {
+        height: 100px;
+        width: 10px;
+        background-color: #4a4a4a;
+        position: absolute;
+        margin-left: 195px;
+        box-shadow: 0 0 5px rgba(74, 74, 74, 0.5);
+      }
+
+      .message {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(45, 90, 45, 0.95);
+        color: #00ff00;
+        padding: 20px;
+        border: 3px solid #4a4a4a;
+        font-size: 18px;
+        text-align: center;
+        z-index: 10;
+        font-weight: bold;
+        text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+      }
+
+      .invincible {
+        animation: blink 0.2s infinite;
+      }
+
+      @keyframes blink {
+        0%, 50% { opacity: 1; }
+        51%, 100% { opacity: 0.3; }
+      }
+
+      .paused {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(45, 90, 45, 0.95);
+        color: #00ff00;
+        padding: 30px;
+        border: 3px solid #4a4a4a;
+        font-size: 24px;
+        text-align: center;
+        z-index: 15;
+        font-weight: bold;
+        text-shadow: 0 0 10px rgba(0, 255, 0, 0.8);
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+      }
+
+      .musicControls {
+        position: absolute;
+        top: 110px;
+        left: 20px;
+        background-color: #2d5a2d;
+        color: #00ff00;
+        border: 2px solid #4a4a4a;
+        padding: 5px 10px;
+        font-size: 0.9em;
+        cursor: pointer;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="game" style="background-image: url('{% static 'images/bg.jpg' %}');">
+      <div class="score"></div>
+      <div class="highScore"></div>
+      <div class="lives"></div>
+      <div class="level"></div>
+      <div class="highLevel"></div>
+      <div class="musicControls" onclick="toggleMusic()"><i class="fas fa-music"></i> MUSIC: ON</div>
+      <div class="startScreen">
+        <p class="ClickToStart">▶ CLICK TO START ◀<br /><br /></p>
+        <p>
+          GREENLINE RUSH<br />
+          Use Arrow Keys to Drive<br />
+          Avoid Red Cars | Collect Hearts<br />
+          3 Lives | ESC to Pause
+        </p>
+      </div>
+      <div class="gameArea"></div>
+    </div>
+
+    <audio id="gameMusic" loop>
+      <source src="{% static 'music/night-drive.mp3' %}" type="audio/mpeg"> 
+    </audio>
+
+<!-- Your full updated script starts here -->
+<script>
+const score = document.querySelector(".score");
+const highScore = document.querySelector(".highScore");
+const lives = document.querySelector(".lives");
+const level = document.querySelector(".level");
+const highLevel = document.querySelector(".highLevel");
+const startScreen = document.querySelector(".startScreen");
+const gameArea = document.querySelector(".gameArea");
+const ClickToStart = document.querySelector(".ClickToStart");
+const gameMusic = document.getElementById("gameMusic");
+const musicControls = document.querySelector(".musicControls");
+
+ClickToStart.addEventListener("click", Start);
+document.addEventListener("keydown", keydown);
+document.addEventListener("keyup", keyup);
+
+let keys = {
+  ArrowUp: false,
+  ArrowDown: false,
+  ArrowLeft: false,
+  ArrowRight: false,
+  Escape: false,
+};
+
+let player = {
+  speed: 3,
+  score: 0,
+  highScore: parseInt(localStorage.getItem("highScore")) || 0,
+  lives: 3,
+  level: 1,
+  highLevel: parseInt(localStorage.getItem("highLevel")) || 1,
+  isPaused: false,
+  isStart: false,
+  invincible: false,
+  carsAvoided: 0,
+  scoreForNextLevel: 100,
+  musicEnabled: true,
+  maxOpponents: 4,
+};
+
+let pauseScreen = null;
+
+function keydown(e) {
+  keys[e.key] = true;
+  if (e.key === "Escape") togglePause();
+}
+
+function keyup(e) {
+  keys[e.key] = false;
+}
+
+function toggleMusic() {
+  player.musicEnabled = !player.musicEnabled;
+  if (player.musicEnabled) {
+    gameMusic.play();
+    musicControls.innerHTML = "🎵 MUSIC: ON";
+  } else {
+    gameMusic.pause();
+    musicControls.innerHTML = "🎵 MUSIC: OFF";
+  }
+}
+
+function showMessage(text, duration = 2000) {
+  let message = document.createElement("div");
+  message.setAttribute("class", "message");
+  message.innerHTML = text;
+  gameArea.appendChild(message);
+
+  setTimeout(() => {
+    if (message.parentNode) {
+      message.parentNode.removeChild(message);
+    }
+  }, duration);
+}
+
+function getScoreForLevel(level) {
+  if (level === 1) return 0;
+  if (level === 2) return 100;
+  if (level === 3) return 250;
+  if (level === 4) return 450;
+  if (level === 5) return 700;
+  if (level === 6) return 1000;
+  return 1000 + (level - 6) * 300;
+}
+
+function getOpponentCountForLevel(level) {
+  if (level >= 6) return 4;
+  if (level >= 3) return 3;
+  return 2;
+}
+
+function Start() {
+  gameArea.innerHTML = "";
+  startScreen.classList.add("hide");
+  player.isStart = true;
+  player.score = 0;
+  player.lives = 3;
+  player.level = 1;
+  player.speed = 3;
+  player.invincible = false;
+  player.carsAvoided = 0;
+  player.scoreForNextLevel = getScoreForLevel(2);
+  player.isPaused = false;
+
+  if (player.musicEnabled) {
+    gameMusic.play();
+  }
+
+  updateDisplays();
+  window.requestAnimationFrame(Play);
+
+  for (let i = 0; i < 5; i++) {
+    let roadLines = document.createElement("div");
+    roadLines.setAttribute("class", "roadLines");
+    roadLines.y = i * 140;
+    roadLines.style.top = roadLines.y + "px";
+    gameArea.appendChild(roadLines);
+  }
+
+  // Create initial opponents (2 cars)
+  for (let i = 0; i < 2; i++) {
+    createOpponent(i * -300);
+  }
+
+  let car = document.createElement("div");
+  car.setAttribute("class", "car");
+  car.innerHTML = '<i class="fas fa-car"></i>';
+  gameArea.appendChild(car);
+  player.x = car.offsetLeft;
+  player.y = car.offsetTop;
+
+  showMessage("🏁 GAME START 🏁<br/>LEVEL " + player.level, 1500);
+}
+
+function createOpponent(startY = -300) {
+  let Opponents = document.createElement("div");
+  Opponents.setAttribute("class", "Opponents");
+  Opponents.y = startY;
+  Opponents.style.top = Opponents.y + "px";
+  Opponents.innerHTML = '<i class="fas fa-car"></i>';
+  Opponents.style.left = Math.floor(Math.random() * 350) + "px";
+  gameArea.appendChild(Opponents);
+}
+
+function createLifeEmoji() {
+  let lifeEmoji = document.createElement("div");
+  lifeEmoji.setAttribute("class", "lifeEmoji");
+  lifeEmoji.y = -50;
+  lifeEmoji.style.top = lifeEmoji.y + "px";
+  lifeEmoji.innerHTML = "❤️";
+  gameArea.appendChild(lifeEmoji);
+  lifeEmoji.style.left = Math.floor(Math.random() * 350) + "px";
+}
+
+function updateDisplays() {
+  score.innerHTML = "SCORE: " + player.score;
+  highScore.innerHTML = "HIGH: " + player.highScore;
+  lives.innerHTML = "LIVES: " + player.lives;
+  level.innerHTML = "LEVEL: " + player.level;
+  highLevel.innerHTML = "HIGH LVL: " + player.highLevel;
+}
+
+function Play() {
+  let car = document.querySelector(".car");
+  let road = gameArea.getBoundingClientRect();
+
+  if (player.isStart && !player.isPaused) {
+    moveLines();
+    moveOpponents(car);
+
+    if (Math.random() < 0.0008) {
+      createLifeEmoji();
+    }
+
+    if (keys.ArrowUp && player.y > road.top + 70) {
+      player.y -= player.speed;
+    }
+    if (keys.ArrowDown && player.y < road.height - 75) {
+      player.y += player.speed;
+    }
+    if (keys.ArrowRight && player.x < 350) {
+      player.x += player.speed;
+    }
+    if (keys.ArrowLeft && player.x > 0) {
+      player.x -= player.speed;
+    }
+
+    car.style.top = player.y + "px";
+    car.style.left = player.x + "px";
+
+    if (player.invincible) {
+      car.classList.add("invincible");
+    } else {
+      car.classList.remove("invincible");
+    }
+
+    if (Math.random() < 0.3) {
+      player.score++;
+    }
+
+    if (player.highScore < player.score) {
+      player.highScore = player.score;
+      localStorage.setItem("highScore", player.highScore);
+    }
+
+    if (player.score >= player.scoreForNextLevel) {
+      levelUp();
+    }
+
+    updateDisplays();
+    window.requestAnimationFrame(Play);
+  }
+}
+
+function moveLines() {
+  let roadLines = document.querySelectorAll(".roadLines");
+  roadLines.forEach(function (item) {
+    if (item.y >= 700) item.y -= 700;
+    item.y += player.speed;
+    item.style.top = item.y + "px";
+  });
+}
+
+function moveOpponents(car) {
+  let Opponents = document.querySelectorAll(".Opponents");
+  Opponents.forEach(function (item) {
+    if (isCollide(car, item) && !player.invincible) {
+      player.lives--;
+      showMessage("💥 COLLISION! 💥<br/>LIVES: " + player.lives, 1200);
+
+      player.invincible = true;
+      setTimeout(() => {
+        player.invincible = false;
+      }, 1000);
+
+      if (player.lives <= 0) {
+        endGame();
+        return;
+      } else {
+        resetPosition(car);
+      }
+    }
+
+    if (item.y >= 750) {
+      item.y -= 900;
+      item.style.left = Math.floor(Math.random() * 350) + "px";
+      player.carsAvoided++;
+      player.score += 2;
+    }
+    item.y += player.speed;
+    item.style.top = item.y + "px";
+  });
+
+  let lifeEmojis = document.querySelectorAll(".lifeEmoji");
+  lifeEmojis.forEach(function (item) {
+    if (isCollide(car, item)) {
+      player.lives++;
+      player.score += 20;
+      showMessage("💖 EXTRA LIFE! 💖<br/>LIVES: " + player.lives, 1200);
+      item.remove();
+    }
+    if (item.y >= 750) {
+      item.remove();
+    }
+    item.y += player.speed;
+    item.style.top = item.y + "px";
+  });
+}
+
+function isCollide(a, b) {
+  let aRect = a.getBoundingClientRect();
+  let bRect = b.getBoundingClientRect();
+  return !(
+    aRect.top > bRect.bottom ||
+    aRect.bottom < bRect.top ||
+    aRect.right < bRect.left ||
+    aRect.left > bRect.right
+  );
+}
+
+function levelUp() {
+  player.level++;
+  player.speed += 0.3;
+  player.scoreForNextLevel = getScoreForLevel(player.level + 1);
+
+  if (player.level > player.highLevel) {
+    player.highLevel = player.level;
+    localStorage.setItem("highLevel", player.highLevel);
+  }
+
+  showMessage("🎉 LEVEL UP! 🎉<br/>LEVEL " + player.level + "<br/>SPEED INCREASED!", 2000);
+
+  // Control number of opponent cars based on level
+  let existingOpponents = document.querySelectorAll(".Opponents").length;
+  let allowedOpponents = getOpponentCountForLevel(player.level);
+
+  while (existingOpponents < allowedOpponents) {
+    createOpponent();
+    existingOpponents++;
+    showMessage("🚗 MORE TRAFFIC! 🚗<br/>STAY ALERT!", 1500);
+  }
+}
+
+function resetPosition(car) {
+  player.x = gameArea.getBoundingClientRect().width / 2 - car.offsetWidth / 2;
+  player.y = gameArea.getBoundingClientRect().height - car.offsetHeight - 10;
+}
+
+function togglePause() {
+  if (!player.isStart) return;
+  player.isPaused = !player.isPaused;
+
+  if (player.isPaused) {
+    gameMusic.pause();
+    pauseScreen = document.createElement("div");
+    pauseScreen.setAttribute("class", "paused");
+    pauseScreen.innerHTML = "⏸️ PAUSED ⏸️<br/><br/>Press ESC to Continue";
+    gameArea.appendChild(pauseScreen);
+  } else {
+    if (player.musicEnabled) gameMusic.play();
+    if (pauseScreen && pauseScreen.parentNode) {
+      pauseScreen.parentNode.removeChild(pauseScreen);
+    }
+    window.requestAnimationFrame(Play);
+  }
+}
+
+function endGame() {
+  player.isStart = false;
+  player.speed = 3;
+  gameMusic.pause();
+  showMessage("💀 GAME OVER! 💀<br/>SCORE: " + player.score + "<br/>LEVEL: " + player.level, 3000);
+
+  setTimeout(() => {
+    startScreen.classList.remove("hide");
+  }, 3000);
+}
+
+updateDisplays();
+</script>
+<!-- End of updated script -->
+
+  </body>
+</html>
