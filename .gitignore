@@ -6,3 +6,4 @@ venv/
 *.log
 *.sqlite3
 node_modules/
+**/__init__.py
