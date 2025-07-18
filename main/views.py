@@ -146,3 +146,38 @@ def sync_on_login(request):
         )
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def check_auth(request):
+    """Check if user is authenticated"""
+    return JsonResponse(
+        {
+            "authenticated": request.user.is_authenticated,
+            "user_id": request.user.id if request.user.is_authenticated else None,
+        }
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def reset_game_data(request):
+    """Reset game data for authenticated users"""
+    try:
+        # Get or create user profile
+        profile, created = GameProfile.objects.get_or_create(
+            user=request.user,
+            defaults={"high_score": 0, "high_level": 1, "music_enabled": True},
+        )
+
+        # Reset profile data
+        profile.high_score = 0
+        profile.high_level = 1
+        profile.save()
+
+        return JsonResponse(
+            {"success": True, "message": "Game data reset successfully"}
+        )
+
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
