@@ -27,6 +27,94 @@ let keys = {
   Escape: false,
 };
 
+// Define the 4 lanes (2 left, 2 right, avoiding center)
+const LANES = {
+  LEFT_1: 45,   // Far left lane
+  LEFT_2: 125,  // Left center lane
+  RIGHT_1: 225, // Right center lane  
+  RIGHT_2: 305  // Far right lane
+};
+
+const LANE_POSITIONS = [LANES.LEFT_1, LANES.LEFT_2, LANES.RIGHT_1, LANES.RIGHT_2];
+
+// Function to get a random lane position
+function getRandomLane() {
+  return LANE_POSITIONS[Math.floor(Math.random() * LANE_POSITIONS.length)];
+}
+
+// Function to find the closest lane to a given x position
+function getClosestLane(x) {
+  let closestLane = LANE_POSITIONS[0];
+  let minDistance = Math.abs(x - LANE_POSITIONS[0]);
+  
+  for (let i = 1; i < LANE_POSITIONS.length; i++) {
+    let distance = Math.abs(x - LANE_POSITIONS[i]);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestLane = LANE_POSITIONS[i];
+    }
+  }
+  
+  return closestLane;
+}
+
+// Function to get the current lane index based on player position
+function getCurrentLaneIndex() {
+  let closestLane = getClosestLane(player.x);
+  return LANE_POSITIONS.indexOf(closestLane);
+}
+
+// Function to check if a position is too close to existing opponents
+function isPositionTooClose(newX, newY, minDistance = 100) {
+  let existingOpponents = document.querySelectorAll(".Opponents");
+  for (let opponent of existingOpponents) {
+    let opponentLeft = parseInt(opponent.style.left);
+    let opponentTop = opponent.y;
+    
+    let xDistance = Math.abs(newX - opponentLeft);
+    let yDistance = Math.abs(newY - opponentTop);
+    
+    if (xDistance < 60 && yDistance < minDistance) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Function to check if a position conflicts with existing hearts
+function isHeartPositionSafe(newX, newY) {
+  let existingHearts = document.querySelectorAll(".lifeEmoji");
+  let existingOpponents = document.querySelectorAll(".Opponents");
+  
+  // Check distance from other hearts
+  for (let heart of existingHearts) {
+    let heartLeft = parseInt(heart.style.left);
+    let heartTop = heart.y;
+    
+    let xDistance = Math.abs(newX - heartLeft);
+    let yDistance = Math.abs(newY - heartTop);
+    
+    if (xDistance < 80 && yDistance < 120) {
+      return false;
+    }
+  }
+  
+  // Check distance from opponents
+  for (let opponent of existingOpponents) {
+    let opponentLeft = parseInt(opponent.style.left);
+    let opponentTop = opponent.y;
+    
+    let xDistance = Math.abs(newX - opponentLeft);
+    let yDistance = Math.abs(newY - opponentTop);
+    
+    if (xDistance < 80 && yDistance < 120) {
+      return false;
+    }
+  }
+  
+  return true;
+}
+
 // Function to disable/enable reset button
 function toggleResetButton(disable) {
   if (resetButton) {
@@ -253,6 +341,10 @@ let player = {
   maxOpponents: 4,
   lastSavedHighScore: gameData.highScore,
   lastSavedHighLevel: gameData.highLevel,
+  currentLaneIndex: 1, // Start in LEFT_2 lane (index 1)
+  isMovingToLane: false,
+  targetLane: null,
+  laneTransitionSpeed: 8
 };
 
 let pauseScreen = null;
@@ -301,11 +393,48 @@ window.onLogout = function() {
 
 function keydown(e) {
   keys[e.key] = true;
-  if (e.key === "Escape") togglePause();
+  
+  // Handle lane switching on keydown for immediate response
+  if (e.key === "ArrowRight" && !player.isMovingToLane) {
+    moveToNextLane(1); // Move right
+  }
+  if (e.key === "ArrowLeft" && !player.isMovingToLane) {
+    moveToNextLane(-1); // Move left
+  }
+  if (e.key === "Escape") {
+    togglePause();
+  }
 }
 
 function keyup(e) {
   keys[e.key] = false;
+}
+
+function moveToNextLane(direction) {
+  let newLaneIndex = player.currentLaneIndex + direction;
+  
+  // Ensure we stay within lane bounds
+  if (newLaneIndex >= 0 && newLaneIndex < LANE_POSITIONS.length) {
+    player.currentLaneIndex = newLaneIndex;
+    player.targetLane = LANE_POSITIONS[newLaneIndex];
+    player.isMovingToLane = true;
+  }
+}
+
+function updateLanePosition() {
+  if (player.isMovingToLane && player.targetLane !== null) {
+    let distance = player.targetLane - player.x;
+    
+    if (Math.abs(distance) <= player.laneTransitionSpeed) {
+      // Snap to target lane
+      player.x = player.targetLane;
+      player.isMovingToLane = false;
+      player.targetLane = null;
+    } else {
+      // Move towards target lane
+      player.x += distance > 0 ? player.laneTransitionSpeed : -player.laneTransitionSpeed;
+    }
+  }
 }
 
 function toggleMusic() {
@@ -373,6 +502,9 @@ function Start() {
   player.carsAvoided = 0;
   player.scoreForNextLevel = getScoreForLevel(2);
   player.isPaused = false;
+  player.currentLaneIndex = 1; // Start in LEFT_2 lane
+  player.isMovingToLane = false;
+  player.targetLane = null;
 
   // Disable reset button when game starts
   toggleResetButton(true);
@@ -384,6 +516,7 @@ function Start() {
   updateDisplays();
   window.requestAnimationFrame(Play);
 
+  // Create road lines
   for (let i = 0; i < 5; i++) {
     let roadLines = document.createElement("div");
     roadLines.setAttribute("class", "roadLines");
@@ -392,17 +525,23 @@ function Start() {
     gameArea.appendChild(roadLines);
   }
 
+  // Create opponents with proper spacing
   let opponentCount = getOpponentCountForLevel(player.level);
   for (let i = 0; i < opponentCount; i++) {
-    createOpponent(i * -300 - 100);
+    createOpponent(-300 - (i * 200)); // More spacing between initial opponents
   }
 
+  // Create and position player car in a lane
   let car = document.createElement("div");
   car.setAttribute("class", "car");
   car.innerHTML = '<i class="fas fa-car"></i>';
   gameArea.appendChild(car);
-  player.x = car.offsetLeft;
+  
+  // Start player in the left center lane
+  player.x = LANE_POSITIONS[player.currentLaneIndex];
   player.y = car.offsetTop;
+  car.style.left = player.x + "px";
+  car.style.top = player.y + "px";
 
   showMessage("🏁 GAME START 🏁<br/>LEVEL " + player.level, 1500);
 }
@@ -416,30 +555,24 @@ function createOpponent(startY = -300) {
   
   let validPosition = false;
   let attempts = 0;
-  let leftPosition;
+  let lanePosition;
   
+  // Try to find a valid lane position
   while (!validPosition && attempts < 20) {
-    leftPosition = Math.floor(Math.random() * 350);
-    validPosition = true;
+    lanePosition = getRandomLane();
     
-    let existingOpponents = document.querySelectorAll(".Opponents");
-    for (let opponent of existingOpponents) {
-      let opponentLeft = parseInt(opponent.style.left);
-      let opponentTop = opponent.y;
-      
-      if (Math.abs(leftPosition - opponentLeft) < 90 && Math.abs(startY - opponentTop) < 150) {
-        validPosition = false;
-        break;
-      }
+    if (!isPositionTooClose(lanePosition, startY, 150)) {
+      validPosition = true;
     }
     attempts++;
   }
   
+  // If no valid position found, use a random lane anyway
   if (!validPosition) {
-    leftPosition = Math.floor(Math.random() * 350);
+    lanePosition = getRandomLane();
   }
   
-  Opponents.style.left = leftPosition + "px";
+  Opponents.style.left = lanePosition + "px";
   gameArea.appendChild(Opponents);
 }
 
@@ -449,8 +582,28 @@ function createLifeEmoji() {
   lifeEmoji.y = -50;
   lifeEmoji.style.top = lifeEmoji.y + "px";
   lifeEmoji.innerHTML = "❤️";
+  
+  let validPosition = false;
+  let attempts = 0;
+  let lanePosition;
+  
+  // Try to find a safe lane position for the heart
+  while (!validPosition && attempts < 30) {
+    lanePosition = getRandomLane();
+    
+    if (isHeartPositionSafe(lanePosition, lifeEmoji.y)) {
+      validPosition = true;
+    }
+    attempts++;
+  }
+  
+  // If no safe position found, try a random position in lanes
+  if (!validPosition) {
+    lanePosition = getRandomLane();
+  }
+  
+  lifeEmoji.style.left = lanePosition + "px";
   gameArea.appendChild(lifeEmoji);
-  lifeEmoji.style.left = Math.floor(Math.random() * 350) + "px";
 }
 
 function updateDisplays() {
@@ -469,21 +622,20 @@ function Play() {
     moveLines();
     moveOpponents(car);
 
-    if (Math.random() < 0.0008) {
+    // Slightly reduced chance for hearts to spawn
+    if (Math.random() < 0.0005) {
       createLifeEmoji();
     }
 
+    // Update lane position (smooth transition)
+    updateLanePosition();
+
+    // Movement controls - only up/down movement, lane switching handled by keydown
     if (keys.ArrowUp && player.y > road.top + 70) {
       player.y -= player.speed;
     }
     if (keys.ArrowDown && player.y < road.height - 75) {
       player.y += player.speed;
-    }
-    if (keys.ArrowRight && player.x < 350) {
-      player.x += player.speed;
-    }
-    if (keys.ArrowLeft && player.x > 0) {
-      player.x -= player.speed;
     }
 
     car.style.top = player.y + "px";
@@ -546,32 +698,23 @@ function moveOpponents(car) {
       
       let validPosition = false;
       let attempts = 0;
-      let leftPosition;
+      let lanePosition;
       
+      // Find a valid lane position for respawning
       while (!validPosition && attempts < 20) {
-        leftPosition = Math.floor(Math.random() * 350);
-        validPosition = true;
+        lanePosition = getRandomLane();
         
-        let otherOpponents = document.querySelectorAll(".Opponents");
-        for (let opponent of otherOpponents) {
-          if (opponent !== item) {
-            let opponentLeft = parseInt(opponent.style.left);
-            let opponentTop = opponent.y;
-            
-            if (Math.abs(leftPosition - opponentLeft) < 90 && Math.abs(item.y - opponentTop) < 150) {
-              validPosition = false;
-              break;
-            }
-          }
+        if (!isPositionTooClose(lanePosition, item.y, 150)) {
+          validPosition = true;
         }
         attempts++;
       }
       
       if (!validPosition) {
-        leftPosition = Math.floor(Math.random() * 350);
+        lanePosition = getRandomLane();
       }
       
-      item.style.left = leftPosition + "px";
+      item.style.left = lanePosition + "px";
       player.carsAvoided++;
       player.score += 2;
     }
@@ -579,6 +722,7 @@ function moveOpponents(car) {
     item.style.top = item.y + "px";
   });
 
+  // Handle heart collection with improved collision detection
   let lifeEmojis = document.querySelectorAll(".lifeEmoji");
   lifeEmojis.forEach(function (item) {
     if (isCollide(car, item)) {
@@ -621,7 +765,7 @@ function levelUp() {
   let allowedOpponents = getOpponentCountForLevel(player.level);
 
   while (existingOpponents < allowedOpponents) {
-    createOpponent(-300 - (existingOpponents * 200));
+    createOpponent(-400 - (existingOpponents * 250)); // Better spacing for new opponents
     existingOpponents++;
     if (existingOpponents > 2) {
       showMessage("🚗 MORE TRAFFIC! 🚗<br/>STAY ALERT!", 1500);
@@ -630,8 +774,14 @@ function levelUp() {
 }
 
 function resetPosition(car) {
-  player.x = gameArea.getBoundingClientRect().width / 2 - car.offsetWidth / 2;
+  // Reset to left center lane
+  player.currentLaneIndex = 1;
+  player.x = LANE_POSITIONS[player.currentLaneIndex];
   player.y = gameArea.getBoundingClientRect().height - car.offsetHeight - 10;
+  player.isMovingToLane = false;
+  player.targetLane = null;
+  car.style.left = player.x + "px";
+  car.style.top = player.y + "px";
 }
 
 function togglePause() {
